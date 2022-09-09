@@ -1,6 +1,6 @@
 [package]
 name = "bit-struct"
-version = "0.1.30"
+version = "0.1.32"
 edition = "2021"
 description = "Define structs which have fields which are assigned to individual bits, not bytes"
 repository = "https://github.com/andrewgazelka/bit-struct"

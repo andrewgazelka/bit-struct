@@ -1203,7 +1203,7 @@ macro_rules! enum_impl {
         #[repr(u8)]
         $(#[doc = $struct_doc])*
         $(#[derive($($struct_der),+)])?
-        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, bit_struct::serde::Serialize, bit_struct::serde::Deserialize)]
+        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq, bit_struct::serde::Serialize, bit_struct::serde::Deserialize)]
         $enum_vis enum $name {
             $(#[doc = $fst_field_doc])*
             $fst_field,
@@ -1258,7 +1258,7 @@ macro_rules! enum_impl {
         #[repr(u8)]
         $(#[doc = $struct_doc])*
         $(#[derive($($struct_der),+)])?
-        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, bit_struct::serde::Serialize, bit_struct::serde::Deserialize)]
+        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq, bit_struct::serde::Serialize, bit_struct::serde::Deserialize)]
         $enum_vis enum $name {
             $(#[doc = $fst_field_doc])*
             $fst_field,
