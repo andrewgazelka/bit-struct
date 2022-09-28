@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/bit-struct.svg)](https://crates.io/crates/bit-struct)
 [![codecov](https://codecov.io/gh/andrewgazelka/bit-struct/branch/main/graph/badge.svg?token=60R82VBBVF)](https://codecov.io/gh/andrewgazelka/bit-struct)
-![Minimum rustc version](https://img.shields.io/badge/rustc-1.57.0+-yellow.svg)
+![Minimum rustc version](https://img.shields.io/badge/rustc-1.62.1+-yellow.svg)
 
 Bit struct is a crate which allows for ergonomic use of C-like bit fields without mediocre IDE support resulting from proc macros.
 In addition, everything is statically typed checked!
