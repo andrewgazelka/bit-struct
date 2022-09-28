@@ -1,18 +1,21 @@
 [package]
 name = "bit-struct"
-version = "0.1.32"
+version = "0.2.0"
 edition = "2021"
 description = "Define structs which have fields which are assigned to individual bits, not bytes"
-repository = "https://github.com/andrewgazelka/bit-struct"
+repository = "https://github.com/parallel-systems/bit-struct"
+documentation = "https://docs.rs/crate/bit-struct/latest"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 keywords = ["bit", "struct", "macros"]
+categories = ["no-std"]
+rust-version = "1.57"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 num-traits = { version = "0.2", default-features = false }
-serde = { version = "1.0", default-features = false }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
 trybuild = "1.0"

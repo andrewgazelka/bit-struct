@@ -1,5 +1,5 @@
 use bit_struct::*;
-use num_traits::{Bounded, Num, One, Zero};
+use num_traits::{Bounded, One, Zero};
 use std::cmp::Ordering;
 
 #[macro_use]
@@ -16,7 +16,7 @@ enums!(
 );
 
 bit_struct!(
-    /// Abc struct
+    /// `Abc` struct
     #[derive(Default)]
     struct Abc(u16){
         mode: ModeA,
@@ -53,6 +53,7 @@ fn test_create() {
 }
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn test_always_valid_enum() {
     assert!(!<ModeA as ValidCheck<u8>>::ALWAYS_VALID);
     assert!(!<ModeA as ValidCheck<u16>>::ALWAYS_VALID);
@@ -70,22 +71,22 @@ fn test_from() {
 #[test]
 fn test_bools() {
     let mut bools = Bools::of_defaults();
-    assert_eq!(bools.flag_a().get(), false);
-    assert_eq!(bools.flag_b().get(), false);
+    assert!(!bools.flag_a().get());
+    assert!(!bools.flag_b().get());
 
     bools.flag_a().set(true);
-    assert_eq!(bools.flag_a().get(), true);
-    assert_eq!(bools.flag_b().get(), false);
+    assert!(bools.flag_a().get());
+    assert!(!bools.flag_b().get());
 
     bools.flag_a().set(false);
     bools.flag_b().set(true);
-    assert_eq!(bools.flag_a().get(), false);
-    assert_eq!(bools.flag_b().get(), true);
+    assert!(!bools.flag_a().get());
+    assert!(bools.flag_b().get());
 
     bools.flag_a().set(true);
     bools.flag_b().set(true);
-    assert_eq!(bools.flag_a().get(), true);
-    assert_eq!(bools.flag_b().get(), true);
+    assert!(bools.flag_a().get());
+    assert!(bools.flag_b().get());
 }
 
 #[test]
@@ -144,7 +145,7 @@ fn test_non_core_base() {
     let raw = non_core_base.raw();
 
     let circle = NonCoreBase::try_from(raw).unwrap();
-    assert_eq!(circle, non_core_base)
+    assert_eq!(circle, non_core_base);
 }
 
 #[test]
@@ -376,8 +377,8 @@ fn test_num_trait() {
     for num in all_i9s() {
         let actual = num.value();
         let from = format!("{}", actual);
-        let a = i16::from_str_radix(&from, 10);
-        let b = i9::from_str_radix(&from, 10);
+        let a = str::parse::<i16>(&from);
+        let b = str::parse::<i9>(&from);
         eq!(a.unwrap(), b.unwrap());
     }
 

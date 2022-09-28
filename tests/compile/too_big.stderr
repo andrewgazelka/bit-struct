@@ -1,83 +1,11 @@
-error[E0433]: failed to resolve: could not find `Serialize` in `serde`
-    --> src/lib.rs
-     |
-     | / macro_rules! bit_struct {
-     | |     (
-     | |         $(
-     | |         $(#[doc = $struct_doc:expr])*
-...    |
-     | |                 #[derive(bit_struct::serde::Serialize)]
-     | |                                             ^^^^^^^^^ could not find `Serialize` in `serde`
-...    |
-     | |     };
-     | | }
-     | |_- in this expansion of `bit_struct::bit_struct!`
-     |
-    ::: tests/compile/too_big.rs:1:1
-     |
-1    | / bit_struct::bit_struct! {
-2    | |     struct TooMany(u16) {
-3    | |         a: u32
-4    | |     }
-5    | | }
-     | |_- in this macro invocation
-
-error[E0433]: failed to resolve: could not find `Deserialize` in `serde`
-    --> src/lib.rs
-     |
-     | / macro_rules! bit_struct {
-     | |     (
-     | |         $(
-     | |         $(#[doc = $struct_doc:expr])*
-...    |
-     | |                 #[derive(bit_struct::serde::Deserialize)]
-     | |                                             ^^^^^^^^^^^ could not find `Deserialize` in `serde`
-...    |
-     | |     };
-     | | }
-     | |_- in this expansion of `bit_struct::bit_struct!`
-     |
-    ::: tests/compile/too_big.rs:1:1
-     |
-1    | / bit_struct::bit_struct! {
-2    | |     struct TooMany(u16) {
-3    | |         a: u32
-4    | |     }
-5    | | }
-     | |_- in this macro invocation
-
 error[E0080]: evaluation of constant value failed
-    --> src/lib.rs
-     |
-     | / macro_rules! impl_fields {
-     | |
-     | |     ($on: expr, $kind: ty =>
-     | |     [$($first_field_doc: expr),*], $head_field: ident, $head_actual: ty $(, [$($field_doc: expr),*], $field: ident, $actual: ty)*) => {
-     | |         $(#[doc=$first_field_doc])*
-     | |         pub fn $head_field(&mut self) -> bit_struct::GetSet<'_, $kind, $head_actual, {$on - <$head_actual as bit_struct::BitCount>::COUNT}, ...
-     | |                                                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ attempt to compute `16_usize - 32_usize`, which would overflow
-...    |
-     | |     ($on: expr, $kind: ty =>) => {};
-     | | }
-     | |_- in this expansion of `bit_struct::impl_fields!` (#2)
-...
-     | / macro_rules! bit_struct {
-     | |     (
-     | |         $(
-     | |         $(#[doc = $struct_doc:expr])*
-...    |
-     | |             bit_struct::impl_fields!(<$kind as bit_struct::BitCount>::COUNT, $kind => $([$($field_doc),*], $field, $actual),*);
-     | |             ------------------------------------------------------------------------------------------------------------------ in this macro invocation (#2)
-...    |
-     | |     };
-     | | }
-     | |_- in this expansion of `bit_struct::bit_struct!` (#1)
-     |
-    ::: tests/compile/too_big.rs:1:1
-     |
-1    | / bit_struct::bit_struct! {
-2    | |     struct TooMany(u16) {
-3    | |         a: u32
-4    | |     }
-5    | | }
-     | |_- in this macro invocation (#1)
+ --> tests/compile/too_big.rs:1:1
+  |
+1 | / bit_struct::bit_struct! {
+2 | |     struct TooMany(u16) {
+3 | |         a: u32
+4 | |     }
+5 | | }
+  | |_^ attempt to compute `16_usize - 32_usize`, which would overflow
+  |
+  = note: this error originates in the macro `$crate::impl_fields` which comes from the expansion of the macro `bit_struct::bit_struct` (in Nightly builds, run with -Z macro-backtrace for more info)

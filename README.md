@@ -1,4 +1,4 @@
-# bit-struct #![no_std]
+# bit-struct
 
 [![crates.io](https://img.shields.io/crates/v/bit-struct.svg)](https://crates.io/crates/bit-struct)
 [![codecov](https://codecov.io/gh/andrewgazelka/bit-struct/branch/main/graph/badge.svg?token=60R82VBBVF)](https://codecov.io/gh/andrewgazelka/bit-struct)
@@ -14,12 +14,12 @@ use bit_struct::*;
 
 enums! {
     // 2 bits, i.e., 0b00, 0b01, 0b10
-    HouseKind { Urban, Suburban, Rural}
+    pub HouseKind { Urban, Suburban, Rural}
 }
 
 bit_struct! {
     // u8 is the base storage type. This can be any multiple of 8
-    struct HouseConfig(u8) {
+    pub struct HouseConfig(u8) {
         // 2 bits
         kind: HouseKind,
         
@@ -30,47 +30,58 @@ bit_struct! {
         highest_floor: u2,
     }
 }
-```
 
-We can create a new `HouseConfig` like such:
-```rust
+// We can create a new `HouseConfig` like such:
+// where all numbers are statically checked to be in bounds.
 let config = HouseConfig::new(HouseKind::Suburban, i3!(-2), u2!(1));
-```
-where all numbers are statically checked to be in bounds. We can get the 
-raw `u8` which represents `config`:
-```rust
+
+// We can get the raw `u8` which represents `config`:
 let raw: u8 = config.raw();
-```
-or we can get a `HouseConfig` from a `u8` like
-```rust
-let config: HouseConfig = HouseConfig::try_from(123_u8).unwrap();
-```
-We need to unwrap because `HouseConfig` is not valid for all numbers. For instance, if the
-most significant bits are `0b11`, it encodes an invalid `HouseKind`. However, 
-if all elements of a struct are always valid (suppose we removed the `kind` field), the struct will
-auto implement a trait which allows calling
-```rust
-let config: HouseConfig = HouseConfig::exact_from(123_u8);
-```
-which will never panic. We can access values of `config` like so:
-```rust
-// get a value
+assert_eq!(114_u8, raw);
+
+// or we can get a `HouseConfig` from a `u8` like:
+let mut config: HouseConfig = HouseConfig::try_from(114_u8).unwrap();
+assert_eq!(config, HouseConfig::new(HouseKind::Suburban, i3!(-2), u2!(1)));
+// We need to unwrap because `HouseConfig` is not valid for all numbers. For instance, if the
+// most significant bits are `0b11`, it encodes an invalid `HouseKind`. However, 
+// if all elements of a struct are always valid (suppose we removed the `kind` field), the struct will
+// auto implement a trait which allows calling the non-panicking:
+// let config: HouseConfig = HouseConfig::exact_from(123_u8);
+
+// We can access values of `config` like so:
 let kind: HouseKind = config.kind().get();
 
-// set a value
+// And we can set values like so:
 config.lowest_floor().set(i3!(0));
-```
-We can also access bit-level numbers as std-lib values like this
-```rust
+
+// We can also convert the new numeric types for alternate bit-widths into the 
+// numeric types provided by the standard library:
 let lowest_floor: i3 = config.lowest_floor().get();
 let lowest_floor_std: i8 = lowest_floor.value();
+assert_eq!(lowest_floor_std, 0_i8);
 ```
 
 ## Benefits
 - No proc macros
 - Autocompletion fully works (tested in IntelliJ Rust)
 - Fast compile times
-- Statically checked bounds (structs cannot be over-filled)
+- Statically checks that structs are not overfilled. For example, these overfilled structs will not compile:
+  ```compile_fail
+    bit_struct::bit_struct! {
+        struct TooManyFieldsToFit(u16) {
+            a: u8,
+            b: u8,
+            c: bit_struct::u1
+        }
+    }
+  ```
+  ```compile_fail
+    bit_struct::bit_struct! {
+        struct FieldIsTooBig(u16) {
+            a: u32
+        }
+    }
+  ```
 - Statically checked types
 
 ## Further Documentation
