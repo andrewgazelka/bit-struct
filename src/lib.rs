@@ -1,5 +1,4 @@
-//! bit-struct
-
+#![doc = include_str!("../README.md")]
 #![no_std]
 
 use core::{
@@ -13,10 +12,22 @@ use core::{
 };
 
 use num_traits::{Bounded, Num, One, Zero};
+/// Import serde here so we can reference it inside macros
+#[doc(hidden)]
 pub use serde;
-use serde::{Deserializer, Serializer};
 
-/// [UnsafeStorage] is used to mark that there are some arbitrary invariants
+mod types;
+pub use types::{
+    i10, i11, i12, i13, i14, i15, i17, i18, i19, i2, i20, i21, i22, i23, i24, i25, i26, i27, i28,
+    i29, i3, i30, i31, i33, i34, i35, i36, i37, i38, i39, i4, i40, i41, i42, i43, i44, i45, i46,
+    i47, i48, i49, i5, i50, i51, i52, i53, i54, i55, i56, i57, i58, i59, i6, i60, i61, i62, i63,
+    i7, i9, u1, u10, u11, u12, u13, u14, u15, u17, u18, u19, u2, u20, u21, u22, u23, u24, u25, u26,
+    u27, u28, u29, u3, u30, u31, u33, u34, u35, u36, u37, u38, u39, u4, u40, u41, u42, u43, u44,
+    u45, u46, u47, u48, u49, u5, u50, u51, u52, u53, u54, u55, u56, u57, u58, u59, u6, u60, u61,
+    u62, u63, u7, u9,
+};
+
+/// [`UnsafeStorage`] is used to mark that there are some arbitrary invariants
 /// which must be maintained in storing its inner value. Therefore, creation and
 /// modifying of the inner value is an "unsafe" behavior. Although it might not
 /// be unsafe in traditional Rust terms (no memory unsafety), behavior might be
@@ -31,42 +42,36 @@ use serde::{Deserializer, Serializer};
 pub struct UnsafeStorage<T>(T);
 
 impl<T> UnsafeStorage<T> {
+    /// Create a new `UnsafeStorage` with the given inner value.
+    ///
     /// # Safety
     /// - See the broader scope that this is called in and which invariants are
     ///   mentioned
-    pub unsafe fn new_unsafe(inner: T) -> Self {
+    pub const unsafe fn new_unsafe(inner: T) -> Self {
         Self(inner)
     }
 
+    /// Mutably access the value stored inside
+    ///
     /// # Safety
     /// This should be a safe operation assuming that when modifying T to T',
-    /// UnsafeStorage::new_unsafe(T') is safe
+    /// `UnsafeStorage::new_unsafe`(T') is safe
     pub unsafe fn as_ref_mut(&mut self) -> &mut T {
         &mut self.0
     }
 }
 
+impl<T> AsRef<T> for UnsafeStorage<T> {
+    /// Access the value stored inside
+    fn as_ref(&self) -> &T {
+        &self.0
+    }
+}
+
 impl<T: Copy> UnsafeStorage<T> {
-    pub fn inner(&self) -> T {
+    /// Access the value stored inside
+    pub const fn inner(&self) -> T {
         self.0
-    }
-}
-
-/// A struct which allows for getting/setting a given property
-pub struct GetSet<'a, P, T, const START: usize, const STOP: usize> {
-    /// The referenced bitfield type.
-    parent: &'a mut P,
-    /// The type in the get/set operations
-    _phantom: PhantomData<T>,
-}
-
-impl<'a, P, T, const START: usize, const STOP: usize> GetSet<'a, P, T, START, STOP> {
-    pub fn start(&self) -> usize {
-        START
-    }
-
-    pub fn stop(&self) -> usize {
-        STOP
     }
 }
 
@@ -76,616 +81,79 @@ impl<'a, P, T, const START: usize, const STOP: usize> GetSet<'a, P, T, START, ST
 /// Define `Num` as `{i,u}{8,16,32,64,128}`.
 /// - when calling `core::mem::transmute` on `Self`, only bits [0, COUNT) can be
 ///   non-zero
-/// - TryFrom<Num> produces Some(x) <=> core::mem::transmute(num) produces a
-///   valid Self(x)
-/// - TryFrom<Num> produces None <=> core::mem::transmute(num) produces an
+/// - `TryFrom<Num>` produces `Some(x)` <=> `core::mem::transmute(num)` produces
+///   a valid Self(x)
+/// - `TryFrom<Num>` produces `None` <=> `core::mem::transmute(num)` produces an
 ///   invalid state for Self
 pub unsafe trait BitCount {
+    /// The number of bits associated with this type
     const COUNT: usize;
 }
 
-macro_rules! bit_counts {
-    ($($num: ty = $count: literal),*) => {
-        $(
-        unsafe impl BitCount for $num {
-            const COUNT: usize = $count;
-        }
-        )*
-    };
+/// A type which can be a field of a `bit_struct`
+pub trait FieldStorage {
+    /// The type this field stores as
+    type StoredType;
+    /// Get the raw representation of this value
+    fn inner_raw(self) -> Self::StoredType;
 }
 
-bit_counts!(u8 = 8, u16 = 16, u32 = 32, u64 = 64, u128 = 128, bool = 1);
-
-macro_rules! always_valid {
-    ($($elem: ty),*) => {
-        $(
-        unsafe impl <P> ValidCheck<P> for $elem {
-            const ALWAYS_VALID: bool = true;
-        }
-        )*
-    };
+/// A conversion type for fitting the bits of one type into the bits of another
+/// type
+///
+/// This differs from [`Into`] because the value may not be semantically the
+/// same, this trait just asserts that the conversion can be done injectively.
+///
+/// The default implementation for our numeric types is to zero-extend the bits
+/// to fit the target size.
+pub trait BitsFitIn<T> {
+    /// Fits `self` into the target type
+    fn fit(self) -> T;
 }
 
-always_valid!(u8, u16, u32, u64, u128, i8, i16, i32, i64, i128, bool);
-
-impl u1 {
-    pub const TRUE: u1 = u1(1);
-    pub const FALSE: u1 = u1(0);
-
-    pub fn toggle(self) -> Self {
-        match self {
-            Self::FALSE => u1::TRUE,
-            _ => Self::FALSE,
-        }
+/// Check whether the underlying bits are valid
+///
+/// The type implementing this trait checks if the value stored in a bit
+/// representation of type `P` is a valid representation of this type. The
+/// [`enums`] macro implements this type for all of the integer-byte-width types
+/// from this crate.
+///
+/// # Safety
+///
+/// The [`ValidCheck::is_valid`] function must be correctly implemented or else
+/// other functions in this crate won't work correctly. Implementation of this
+/// trait is preferably done by public macros in this crate, which will
+/// implement it correctly.
+pub unsafe trait ValidCheck<P> {
+    /// Set this to true if, at compile-time, we can tell that all bit
+    /// representations which contain the appropriate number of bits are valid
+    /// representations of this type
+    const ALWAYS_VALID: bool = false;
+    /// Return whether or not the underlying bits of `P` are valid
+    /// representation of this type
+    fn is_valid(_input: P) -> bool {
+        true
     }
 }
 
-macro_rules! new_signed_types {
-    (
-        $($name: ident($count: literal, $inner: ty, $signed: ty)),*
-    ) => {
-        $(
-
-        #[allow(non_camel_case_types)]
-        #[derive(Copy, Clone, Eq, PartialEq, Hash)]
-        pub struct $name($inner);
-
-        always_valid!($name);
-
-        impl serde::Serialize for $name {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: Serializer,
-            {
-                self.value().serialize(serializer)
-            }
-        }
-
-        impl <'de> serde::Deserialize<'de> for $name {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-            where
-                D: Deserializer<'de>,
-            {
-                let inner = <$signed>::deserialize(deserializer)?;
-                $name::new(inner).ok_or(serde::de::Error::custom("invalid size"))
-            }
-        }
-
-        impl PartialOrd for $name {
-            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-                self.value().partial_cmp(&other.value())
-            }
-        }
-
-        impl Ord for $name {
-            fn cmp(&self, other: &Self) -> Ordering {
-                self.value().cmp(&other.value())
-            }
-        }
-
-        impl Debug for $name {
-            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-                f.write_fmt(format_args!("{}", self.value()))
-            }
-        }
-
-        impl Display for $name {
-            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-                f.write_fmt(format_args!("{}", self.value()))
-            }
-        }
-
-        #[macro_export]
-        macro_rules! $name {
-            ($value: expr) => {
-                {
-                    const VALUE: $signed = $value;
-                    const _: () = assert!(VALUE <= bit_struct::$name::MAX, "The provided value is too large");
-                    const _: () = assert!(VALUE >= bit_struct::$name::MIN, "The provided value is too small");
-                    let res: $name = unsafe {bit_struct::$name::new_unchecked(VALUE)};
-                    res
-                }
-            };
-        }
-
-
-        unsafe impl BitCount for $name {
-            const COUNT: usize = $count;
-        }
-
-        num_traits!($name, $signed);
-
-        impl $name {
-            /// Create a new $name from value
-            /// # Safety
-            /// - value must fit within the number of bits defined in the type
-            pub unsafe fn new_unchecked(value: $signed) -> Self {
-                let unsigned_value = value as $inner;
-                if value >= 0 {
-                    Self(unsigned_value)
-                } else {
-                    // we can do this
-                    let value = unsigned_value & Self::MAX_UNSIGNED;
-                    Self(value | Self::POLARITY_FLAG)
-                }
-            }
-
-
-            /// Create a new $name from value
-            /// # Safety
-            /// - value must fit within the number of bits defined in the type
-            pub fn new(value: $signed) -> Option<Self> {
-                if value < Self::MIN || value > Self::MAX {
-                    None
-                } else {
-                    Some(unsafe {Self::new_unchecked(value)})
-                }
-            }
-
-            pub fn inner_raw(self) -> $inner {
-                self.0
-            }
-
-            const POLARITY_FLAG: $inner = (1 << ($count - 1));
-            const MAX_UNSIGNED: $inner = (1 << ($count-1)) - 1;
-            pub const MAX: $signed = Self::MAX_UNSIGNED as $signed;
-            pub const MIN: $signed = -(Self::MAX_UNSIGNED as $signed) - 1;
-
-            pub fn value(self) -> $signed {
-                match self.0 >> ($count - 1) {
-                    0 => self.0 as $signed,
-                    _ => {
-                        // 0's out negative
-                        let rem = self.0 ^ Self::POLARITY_FLAG;
-                        let amount = Self::MAX_UNSIGNED - rem;
-                        -(amount as $signed) - 1
-                    }
-                }
-            }
-        }
-
-        impl Default for $name {
-            fn default() -> Self {
-                Self(0)
-            }
-        }
-        )*
-    };
+/// A struct which allows for getting/setting a given property
+pub struct GetSet<'a, P, T, const START: usize, const STOP: usize> {
+    /// The referenced bitfield type.
+    parent: &'a mut P,
+    /// The type in the get/set operations
+    _phantom: PhantomData<&'a mut T>,
 }
 
-macro_rules! num_traits {
-    ($num:ident, $super_kind:ty) => {
-        impl Zero for $num {
-            fn zero() -> Self {
-                $num::new(0).unwrap()
-            }
+impl<'a, P, T, const START: usize, const STOP: usize> GetSet<'a, P, T, START, STOP> {
+    /// The bit offset at which this `GetSet` instance starts
+    pub const fn start(&self) -> usize {
+        START
+    }
 
-            fn is_zero(&self) -> bool {
-                self.0 == 0
-            }
-        }
-
-        impl Add for $num {
-            type Output = Self;
-
-            fn add(self, rhs: Self) -> Self::Output {
-                $num::new(self.value() + rhs.value()).unwrap()
-            }
-        }
-
-        impl One for $num {
-            fn one() -> Self {
-                $num::new(1).unwrap()
-            }
-        }
-
-        impl Mul for $num {
-            type Output = Self;
-
-            fn mul(self, rhs: Self) -> Self::Output {
-                $num::new(self.value() * rhs.value()).unwrap()
-            }
-        }
-
-        impl Sub for $num {
-            type Output = $num;
-
-            fn sub(self, rhs: Self) -> Self::Output {
-                $num::new(self.value() - rhs.value()).unwrap()
-            }
-        }
-
-        impl Div for $num {
-            type Output = Self;
-
-            fn div(self, rhs: Self) -> Self::Output {
-                $num::new(self.value() / rhs.value()).unwrap()
-            }
-        }
-
-        impl Rem for $num {
-            type Output = Self;
-
-            fn rem(self, rhs: Self) -> Self::Output {
-                $num::new(self.value() % rhs.value()).unwrap()
-            }
-        }
-
-        impl Num for $num {
-            type FromStrRadixErr = ();
-
-            fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
-                let parse = <$super_kind>::from_str_radix(str, radix).map_err(|_| ())?;
-                $num::new(parse).ok_or(())
-            }
-        }
-
-        impl Shr<usize> for $num {
-            type Output = $num;
-
-            fn shr(self, rhs: usize) -> Self::Output {
-                $num::new(self.value() >> rhs).unwrap()
-            }
-        }
-
-        impl Shl<usize> for $num {
-            type Output = $num;
-
-            fn shl(self, rhs: usize) -> Self::Output {
-                $num::new(self.value() << rhs).unwrap()
-            }
-        }
-
-        impl ShrAssign<usize> for $num {
-            fn shr_assign(&mut self, rhs: usize) {
-                let got = *self >> rhs;
-                *self = got;
-            }
-        }
-
-        impl ShlAssign<usize> for $num {
-            fn shl_assign(&mut self, rhs: usize) {
-                let got = *self << rhs;
-                *self = got;
-            }
-        }
-
-        impl Bounded for $num {
-            fn min_value() -> Self {
-                $num::new(Self::MIN).unwrap()
-            }
-
-            fn max_value() -> Self {
-                $num::new(Self::MAX).unwrap()
-            }
-        }
-
-        impl BitAnd for $num {
-            type Output = $num;
-
-            fn bitand(self, rhs: Self) -> Self::Output {
-                $num(self.0 & rhs.0)
-            }
-        }
-
-        impl BitXor for $num {
-            type Output = $num;
-
-            fn bitxor(self, rhs: Self) -> Self::Output {
-                $num(self.0 ^ rhs.0)
-            }
-        }
-
-        impl BitXorAssign for $num {
-            fn bitxor_assign(&mut self, rhs: Self) {
-                self.0 ^= rhs.0
-            }
-        }
-
-        impl BitAndAssign for $num {
-            fn bitand_assign(&mut self, rhs: Self) {
-                self.0 &= rhs.0
-            }
-        }
-
-        impl BitOr for $num {
-            type Output = Self;
-
-            fn bitor(self, rhs: Self) -> Self::Output {
-                $num(self.0 | rhs.0)
-            }
-        }
-
-        impl BitOrAssign for $num {
-            fn bitor_assign(&mut self, rhs: Self) {
-                self.0 |= rhs.0;
-            }
-        }
-    };
-}
-
-macro_rules! new_unsigned_types {
-    (
-        $($name: ident($count: literal, $inner: ty)),*
-    ) => {
-        $(
-
-        #[allow(non_camel_case_types)]
-        #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-        pub struct $name($inner);
-
-        always_valid!($name);
-
-        impl Debug for $name {
-            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-                f.write_fmt(format_args!("{}", self.0))
-            }
-        }
-
-        impl Display for $name {
-            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-                f.write_fmt(format_args!("{}", self.0))
-            }
-        }
-
-        impl serde::Serialize for $name {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: Serializer,
-            {
-                self.value().serialize(serializer)
-            }
-        }
-
-        impl <'de> serde::Deserialize<'de> for $name {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-            where
-                D: Deserializer<'de>,
-            {
-                let inner = <$inner>::deserialize(deserializer)?;
-                $name::new(inner).ok_or(serde::de::Error::custom("invalid size"))
-            }
-        }
-
-        #[macro_export]
-        macro_rules! $name {
-            ($value: literal) => {
-                {
-                    const VALUE: $inner = $value;
-
-                    // this is always valid because we have one more bit than we need in $inner
-                    // type
-                    const _: () = assert!(bit_struct::$name::MAX >= VALUE, "The provided value is too large");
-                    unsafe {bit_struct::$name::new_unchecked(VALUE)}
-                }
-            };
-        }
-
-
-        unsafe impl BitCount for $name {
-            const COUNT: usize = $count;
-        }
-
-        impl $name {
-            pub const MAX: $inner = (1 << ($count)) - 1;
-            pub const MIN: $inner = 0;
-
-            /// Create a new $name from value
-            /// # Safety
-            /// - value must fit within the number of bits defined in the type
-            pub unsafe fn new_unchecked(value: $inner) -> Self {
-                Self(value)
-            }
-
-            pub fn new(value: $inner) -> Option<Self> {
-                if value >= Self::MIN && value <= Self::MAX {
-                    Some(unsafe {Self::new_unchecked(value)})
-                } else {
-                    None
-                }
-            }
-
-            pub fn value(self) -> $inner {
-                self.0
-            }
-        }
-
-        impl Default for $name {
-            fn default() -> Self {
-                Self(0)
-            }
-        }
-
-        num_traits!($name, $inner);
-        )*
-    };
-}
-
-new_signed_types!(
-    i2(2, u8, i8),
-    i3(3, u8, i8),
-    i4(4, u8, i8),
-    i5(5, u8, i8),
-    i6(6, u8, i8),
-    i7(7, u8, i8),
-    i9(9, u16, i16),
-    i10(10, u16, i16),
-    i11(11, u16, i16),
-    i12(12, u16, i16),
-    i13(13, u16, i16),
-    i14(14, u16, i16),
-    i15(15, u16, i16),
-    i17(17, u32, i32),
-    i18(18, u32, i32),
-    i19(19, u32, i32),
-    i20(20, u32, i32),
-    i21(21, u32, i32),
-    i22(22, u32, i32),
-    i23(23, u32, i32),
-    i24(24, u32, i32),
-    i25(25, u32, i32),
-    i26(26, u32, i32),
-    i27(27, u32, i32),
-    i28(28, u32, i32),
-    i29(29, u32, i32),
-    i30(30, u32, i32),
-    i31(31, u32, i32),
-    i33(33, u64, i64),
-    i34(34, u64, i64),
-    i35(35, u64, i64),
-    i36(36, u64, i64),
-    i37(37, u64, i64),
-    i38(38, u64, i64),
-    i39(39, u64, i64),
-    i40(40, u64, i64),
-    i41(41, u64, i64),
-    i42(42, u64, i64),
-    i43(43, u64, i64),
-    i44(44, u64, i64),
-    i45(45, u64, i64),
-    i46(46, u64, i64),
-    i47(47, u64, i64),
-    i48(48, u64, i64),
-    i49(49, u64, i64),
-    i50(50, u64, i64),
-    i51(51, u64, i64),
-    i52(52, u64, i64),
-    i53(53, u64, i64),
-    i54(54, u64, i64),
-    i55(55, u64, i64),
-    i56(56, u64, i64),
-    i57(57, u64, i64),
-    i58(58, u64, i64),
-    i59(59, u64, i64),
-    i60(60, u64, i64),
-    i61(61, u64, i64),
-    i62(62, u64, i64),
-    i63(63, u64, i64)
-);
-
-new_unsigned_types!(
-    u1(1, u8),
-    u2(2, u8),
-    u3(3, u8),
-    u4(4, u8),
-    u5(5, u8),
-    u6(6, u8),
-    u7(7, u8),
-    u9(9, u16),
-    u10(10, u16),
-    u11(11, u16),
-    u12(12, u16),
-    u13(13, u16),
-    u14(14, u16),
-    u15(15, u16),
-    u17(17, u32),
-    u18(18, u32),
-    u19(19, u32),
-    u20(20, u32),
-    u21(21, u32),
-    u22(22, u32),
-    u23(23, u32),
-    u24(24, u32),
-    u25(25, u32),
-    u26(26, u32),
-    u27(27, u32),
-    u28(28, u32),
-    u29(29, u32),
-    u30(30, u32),
-    u31(31, u32),
-    u33(33, u64),
-    u34(34, u64),
-    u35(35, u64),
-    u36(36, u64),
-    u37(37, u64),
-    u38(38, u64),
-    u39(39, u64),
-    u40(40, u64),
-    u41(41, u64),
-    u42(42, u64),
-    u43(43, u64),
-    u44(44, u64),
-    u45(45, u64),
-    u46(46, u64),
-    u47(47, u64),
-    u48(48, u64),
-    u49(49, u64),
-    u50(50, u64),
-    u51(51, u64),
-    u52(52, u64),
-    u53(53, u64),
-    u54(54, u64),
-    u55(55, u64),
-    u56(56, u64),
-    u57(57, u64),
-    u58(58, u64),
-    u59(59, u64),
-    u60(60, u64),
-    u61(61, u64),
-    u62(62, u64),
-    u63(63, u64)
-);
-
-macro_rules! byte_from_impls {
-    ($($kind: ident: $super_kind: ty)*) => {
-        $(
-        impl $kind {
-            const ARR_SIZE: usize = <$kind>::COUNT / 8;
-            const SUPER_BYTES: usize = core::mem::size_of::<$super_kind>();
-            pub fn from_be_bytes(bytes: [u8; Self::ARR_SIZE]) -> Self {
-                let mut res_bytes = [0_u8; Self::SUPER_BYTES];
-                for (set, &get) in res_bytes.iter_mut().rev().zip(bytes.iter().rev()) {
-                    *set = get;
-                }
-                Self(<$super_kind>::from_be_bytes(res_bytes))
-            }
-
-            pub fn to_be_bytes(self) -> [u8; Self::ARR_SIZE] {
-                let mut res = [0; Self::ARR_SIZE];
-                let inner_bytes = self.0.to_be_bytes();
-                for (&get, set) in inner_bytes.iter().rev().zip(res.iter_mut().rev()) {
-                    *set = get;
-                }
-                res
-            }
-
-            pub fn from_le_bytes(bytes: [u8; Self::ARR_SIZE]) -> Self {
-                let mut res_bytes = [0_u8; Self::SUPER_BYTES];
-                for (set, &get) in res_bytes.iter_mut().zip(bytes.iter()) {
-                    *set = get;
-                }
-                Self(<$super_kind>::from_le_bytes(res_bytes))
-            }
-
-            pub fn to_le_bytes(self) -> [u8; Self::ARR_SIZE] {
-                let mut res = [0; Self::ARR_SIZE];
-                let inner_bytes = self.0.to_le_bytes();
-                for (&get, set) in inner_bytes.iter().zip(res.iter_mut()) {
-                    *set = get;
-                }
-                res
-            }
-        }
-
-        impl From<u8> for $kind {
-            fn from(byte: u8) -> Self {
-                let inner = <$super_kind>::from(byte);
-                $kind(inner)
-            }
-        }
-        )*
-    };
-}
-
-byte_from_impls! {
-    u24: u32
-    u40: u64
-    u48: u64
-    u56: u64
-    i24: u32
-    i40: u64
-    i48: u64
-    i56: u64
+    /// The bit offset at which this `GetSet` instance ends
+    pub const fn stop(&self) -> usize {
+        STOP
+    }
 }
 
 impl<
@@ -696,8 +164,8 @@ impl<
         const STOP: usize,
     > GetSet<'a, P, T, START, STOP>
 {
-    /// Create a new [GetSet]. This should be called from methods generated by
-    /// the [bit_struct] macro
+    /// Create a new [`GetSet`]. This should be called from methods generated by
+    /// the [`bit_struct`] macro
     pub fn new(parent: &'a mut P) -> Self {
         Self {
             parent,
@@ -705,9 +173,12 @@ impl<
         }
     }
 
-    /// Get a mask of STOP-START + 1 length. This doesn't use the shift left and
-    /// subtract one trick because of the special case where (0b1 << (STOP -
-    /// START + 1)) - 1 will cause an overflow
+    /// Get a mask of `STOP-START + 1` length. This doesn't use the shift left
+    /// and subtract one trick because of the special case where `(0b1 <<
+    /// (STOP - START + 1)) - 1` will cause an overflow
+    // Because `GetSet` has a lot of type parameters, it's easiest to be able to invoke this method
+    // directly on a value instead of having to match the type parameters.
+    #[allow(clippy::unused_self)]
     fn mask(&self) -> P {
         let num_bits = P::COUNT;
         let mut max_value = P::max_value();
@@ -715,13 +186,6 @@ impl<
 
         max_value >>= num_bits - keep_bits;
         max_value
-    }
-}
-
-pub unsafe trait ValidCheck<P> {
-    const ALWAYS_VALID: bool = false;
-    fn is_valid(_input: P) -> bool {
-        true
     }
 }
 
@@ -741,17 +205,24 @@ impl<
         const STOP: usize,
     > GetSet<'a, P, T, START, STOP>
 {
-    /// Get the property. Returns an error it does not exist.
+    /// Get the property this `GetSet` points at
     pub fn get(&self) -> T {
         let section = self.get_raw();
+        // Safety:
+        // This is guaranteed to be safe because the underlying storage must be bigger
+        // than any fields stored within
         unsafe { core::mem::transmute_copy(&section) }
     }
 
+    /// Returns true if the memory this `GetSet` points at is a valid
+    /// representation of `T`
     pub fn is_valid(&self) -> bool {
         let section = self.get_raw();
         T::is_valid(section)
     }
 
+    /// Get the raw bits being pointed at, without type conversion nor any form
+    /// of validation
     pub fn get_raw(&self) -> P {
         let parent = *self.parent;
         let mask = self.mask();
@@ -759,29 +230,28 @@ impl<
     }
 }
 
-impl<
-        'a,
-        P: Num
-            + Shl<usize, Output = P>
-            + Copy
-            + BitOrAssign
-            + BitXorAssign
-            + BitAnd<Output = P>
-            + ShlAssign<usize>
-            + ShrAssign<usize>
-            + PartialOrd
-            + Bounded
-            + Sized
-            + BitCount,
-        T,
-        const START: usize,
-        const STOP: usize,
-    > GetSet<'a, P, T, START, STOP>
+impl<'a, P, T, const START: usize, const STOP: usize> GetSet<'a, P, T, START, STOP>
+where
+    T: FieldStorage + BitsFitIn<P>,
+    P: Num
+        + Shl<usize, Output = P>
+        + Copy
+        + BitOrAssign
+        + BitXorAssign
+        + BitAnd<Output = P>
+        + ShlAssign<usize>
+        + ShrAssign<usize>
+        + PartialOrd
+        + Bounded
+        + Sized
+        + BitCount,
 {
-    /// Set the property with a core::mem::transmute_copy
+    /// Set the property in the slice being pointed to by this `GetSet`
     pub fn set(&mut self, value: T) {
-        let value = unsafe { core::mem::transmute_copy(&value) };
-        unsafe { self.set_raw(value) }
+        // SAFETY:
+        // This is safe because we produce it from a valid value of `T`, so we meet the
+        // safety condition on `set_raw`
+        unsafe { self.set_raw(value.fit()) }
     }
 
     /// Set the field to a raw value.
@@ -801,37 +271,61 @@ impl<
     }
 }
 
+/// A trait that all bit structs implement
+///
+/// See the [`bit_struct`] macro for more details.
 pub trait BitStruct<const ALWAYS_VALID: bool> {
+    /// The underlying type used to store the bit struct
     type Kind;
+    /// Produce a bit struct from the given underlying storage, without checking
+    /// for validity.
+    ///
+    /// # Safety
+    ///
+    /// The caller is responsible for verifying that this value is a valid value
+    /// for the bit struct.
+    ///
+    /// If this is guaranteed to be safe (i.e. all possibly inputs for `value`
+    /// are valid), then the bit struct will also implement [`BitStructExt`]
+    /// which has the [`BitStructExt::exact_from`] method, that you should
+    /// use instead.
     unsafe fn from_unchecked(value: Self::Kind) -> Self;
 }
 
+/// An extension trait for bit structs which can be safely made from any value
+/// in their underlying storage type.
 pub trait BitStructExt: BitStruct<true> {
+    /// Produce a bit struct from the given underlying storage
     fn exact_from(value: Self::Kind) -> Self;
 }
 
 impl<T: BitStruct<true>> BitStructExt for T {
     fn exact_from(value: Self::Kind) -> Self {
+        // SAFETY:
+        // This is safe because this method only exists for bitfields for which it is
+        // always safe to call `from_unchecked`
         unsafe { Self::from_unchecked(value) }
     }
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! impl_fields {
 
     ($on: expr, $kind: ty =>
     [$($first_field_doc: expr),*], $head_field: ident, $head_actual: ty $(, [$($field_doc: expr),*], $field: ident, $actual: ty)*) => {
         $(#[doc=$first_field_doc])*
-        pub fn $head_field(&mut self) -> bit_struct::GetSet<'_, $kind, $head_actual, {$on - <$head_actual as bit_struct::BitCount>::COUNT}, {$on - 1}> {
-            bit_struct::GetSet::new(unsafe {self.0.as_ref_mut()})
+        pub fn $head_field(&mut self) -> $crate::GetSet<'_, $kind, $head_actual, {$on - <$head_actual as $crate::BitCount>::COUNT}, {$on - 1}> {
+            $crate::GetSet::new(unsafe {self.0.as_ref_mut()})
         }
 
-        bit_struct::impl_fields!($on - <$head_actual as bit_struct::BitCount>::COUNT, $kind => $([$($field_doc),*], $field, $actual),*);
+        $crate::impl_fields!($on - <$head_actual as $crate::BitCount>::COUNT, $kind => $([$($field_doc),*], $field, $actual),*);
     };
     ($on: expr, $kind: ty =>) => {};
 }
 
 /// Helper macro
+#[doc(hidden)]
 #[macro_export]
 macro_rules! bit_struct_impl {
     (
@@ -845,7 +339,7 @@ macro_rules! bit_struct_impl {
         }
     ) => {
 
-        bit_struct::bit_struct_impl!(
+        $crate::bit_struct_impl!(
         $(#[doc = $struct_doc])*
         $struct_vis struct $name ($kind) {
         $(
@@ -878,15 +372,16 @@ macro_rules! bit_struct_impl {
 
             /// Creates an empty struct. This may or may not be valid
             pub unsafe fn empty() -> Self {
-                unsafe { Self::from_unchecked(<$kind as bit_struct::BitStructZero>::bs_zero()) }
+                unsafe { Self::from_unchecked(<$kind as $crate::BitStructZero>::bs_zero()) }
             }
 
-            /// Returns a valid representation for the bit_struct, where all values are
-            /// the defaults. This is different than Self::default(), because the actual
-            /// default implementation might not be composed of only the defaults of the
-            /// given fields
+            #[doc = concat!("Returns a valid representation for [`", stringify!($name), "`] where all values are")]
+            /// the defaults
+            ///
+            /// This is different than [`Self::default()`], because the actual default implementation
+            /// might not be composed of only the defaults of the given fields.
             pub fn of_defaults() -> Self {
-                let mut res = unsafe { Self::from_unchecked(<$kind as bit_struct::BitStructZero>::bs_zero()) };
+                let mut res = unsafe { Self::from_unchecked(<$kind as $crate::BitStructZero>::bs_zero()) };
                 $(
                     res.$field().set(Default::default());
                 )*
@@ -907,7 +402,9 @@ macro_rules! bit_struct_impl {
     };
 }
 
+/// A bit struct which has a zero value we can get
 pub trait BitStructZero: Zero {
+    /// Get a zero value for this bit struct
     fn bs_zero() -> Self {
         Self::zero()
     }
@@ -1023,13 +520,13 @@ macro_rules! bit_struct {
         $(
         $(#[doc = $struct_doc])*
         #[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Ord, Hash)]
-        pub struct $name(bit_struct::UnsafeStorage<$kind>);
+        pub struct $name($crate::UnsafeStorage<$kind>);
 
-        impl bit_struct::serde::Serialize for $name {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: bit_struct::serde::Serializer {
+        impl $crate::serde::Serialize for $name {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: $crate::serde::Serializer {
 
                 let mut v = *self;
-                #[derive(bit_struct::serde::Serialize)]
+                #[derive($crate::serde::Serialize)]
                 struct Raw {
                     $($field: $actual),*
                 }
@@ -1042,10 +539,10 @@ macro_rules! bit_struct {
             }
         }
 
-        impl bit_struct::serde::Deserialize<'static> for $name {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: bit_struct::serde::Deserializer<'static> {
+        impl $crate::serde::Deserialize<'static> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: $crate::serde::Deserializer<'static> {
 
-                #[derive(bit_struct::serde::Deserialize)]
+                #[derive($crate::serde::Deserialize)]
                 struct Raw {
                     $($field: $actual),*
                 }
@@ -1071,23 +568,23 @@ macro_rules! bit_struct {
             }
         }
 
-        impl bit_struct::BitStruct<{$(<$actual as bit_struct::ValidCheck<$kind>>::ALWAYS_VALID &&)* true}> for $name {
+        impl $crate::BitStruct<{$(<$actual as $crate::ValidCheck<$kind>>::ALWAYS_VALID &&)* true}> for $name {
             type Kind = $kind;
 
             unsafe fn from_unchecked(inner: $kind) -> Self {
-               Self(unsafe {bit_struct::UnsafeStorage::new_unsafe(inner)})
+               Self(unsafe {$crate::UnsafeStorage::new_unsafe(inner)})
             }
         }
 
         impl $name {
 
             unsafe fn from_unchecked(inner: $kind) -> Self {
-               Self(unsafe {bit_struct::UnsafeStorage::new_unsafe(inner)})
+               Self(unsafe {$crate::UnsafeStorage::new_unsafe(inner)})
             }
 
             #[allow(clippy::too_many_arguments)]
             pub fn new($($field: $actual),*) -> Self {
-                let mut res = unsafe { Self::from_unchecked(<$kind as bit_struct::BitStructZero>::bs_zero()) };
+                let mut res = unsafe { Self::from_unchecked(<$kind as $crate::BitStructZero>::bs_zero()) };
                 $(
                     res.$field().set($field);
                 )*
@@ -1098,13 +595,13 @@ macro_rules! bit_struct {
                 self.0.inner()
             }
 
-            bit_struct::impl_fields!(<$kind as bit_struct::BitCount>::COUNT, $kind => $([$($field_doc),*], $field, $actual),*);
+            $crate::impl_fields!(<$kind as $crate::BitCount>::COUNT, $kind => $([$($field_doc),*], $field, $actual),*);
         }
 
         )*
 
         $(
-        bit_struct::bit_struct_impl!(
+        $crate::bit_struct_impl!(
         $(#[doc = $struct_doc])*
         $(#[derive($($struct_der),+)])?
         $struct_vis struct $name ($kind) {
@@ -1119,17 +616,30 @@ macro_rules! bit_struct {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! count_idents {
     ($on: expr, [$head: ident $(,$xs: ident)*]) => {
-        bit_struct::count_idents!($on + 1, [$($xs),*])
+        $crate::count_idents!($on + 1, [$($xs),*])
     };
     ($on: expr, []) => {
         $on
     }
 }
 
+/// Returns the index of the leading 1 in `num`
+///
+/// Example:
+/// ```
+/// # use bit_struct::bits;
+///
+/// assert_eq!(bits(2), 2);
+/// assert_eq!(bits(3), 2);
+/// assert_eq!(bits(5), 3);
+/// assert_eq!(bits(32), 6);
+/// ```
 pub const fn bits(num: usize) -> usize {
+    /// Helper function for [`bits`]
     const fn helper(count: usize, on: usize) -> usize {
         // 0b11 = 3  log2_ceil(0b11) = 2 .. 2^2
         // 0b10 = 2 log2_ceil = 2 .. 2^1
@@ -1143,49 +653,69 @@ pub const fn bits(num: usize) -> usize {
     helper(0, num)
 }
 
-/// Not meant to be directly used
+/// Helper macro
+#[doc(hidden)]
 #[macro_export]
 macro_rules! enum_impl {
     (FROMS $name: ident: [$($kind: ty),*]) => {
         $(
         impl From<$name> for $kind {
             fn from(value: $name) -> Self {
-                <$kind>::from(value as u8)
+                Self::from(value as u8)
             }
         }
         )*
     };
     (VALID_CORE $name: ident: [$($kind: ty),*]) => {
         $(
-        unsafe impl bit_struct::ValidCheck<$kind> for $name {
-            const ALWAYS_VALID: bool = <$name as bit_struct::ValidCheck<u8>>::ALWAYS_VALID;
+        unsafe impl $crate::ValidCheck<$kind> for $name {
+            const ALWAYS_VALID: bool = <Self as $crate::ValidCheck<u8>>::ALWAYS_VALID;
             fn is_valid(value: $kind) -> bool {
-                $name::is_valid(value as u8)
+                Self::is_valid(value as u8)
             }
         }
         )*
     };
     (COUNT $head:ident $(,$xs: ident)*) => {
-       1 + bit_struct::enum_impl!(COUNT $($xs),*)
+       1 + $crate::enum_impl!(COUNT $($xs),*)
     };
     (COUNT) => {
         0
     };
     (VALID_BIT_STRUCT $name: ident: [$($kind: ty),*]) => {
         $(
-        unsafe impl bit_struct::ValidCheck<$kind> for $name {
-            const ALWAYS_VALID: bool = <$name as bit_struct::ValidCheck<u8>>::ALWAYS_VALID;
+        unsafe impl $crate::ValidCheck<$kind> for $name {
+            const ALWAYS_VALID: bool = <Self as $crate::ValidCheck<u8>>::ALWAYS_VALID;
             fn is_valid(value: $kind) -> bool {
                 let inner = value.value();
-                $name::is_valid(inner as u8)
+                Self::is_valid(inner as u8)
             }
         }
         )*
     };
+    (BITS_FIT_IN $name: ident: [$($kind: ty),+ $(,)?]) => {
+        $(
+        impl $crate::BitsFitIn<$kind> for $name {
+            fn fit(self) -> $kind {
+                (self as u8).fit()
+            }
+        }
+        )+
+    };
     (FROM_IMPLS $name: ident) => {
-        bit_struct::enum_impl!(VALID_CORE $name: [u16, u32, u64, u128]);
-        bit_struct::enum_impl!(VALID_BIT_STRUCT $name: [bit_struct::u24, bit_struct::u40, bit_struct::u48, bit_struct::u56]);
-        bit_struct::enum_impl!(FROMS $name: [u8, u16, u32, u64, u128, bit_struct::u24, bit_struct::u40, bit_struct::u48, bit_struct::u56]);
+        $crate::enum_impl!(VALID_CORE $name: [u16, u32, u64, u128]);
+        $crate::enum_impl!(VALID_BIT_STRUCT $name: [$crate::u24, $crate::u40, $crate::u48, $crate::u56]);
+        $crate::enum_impl!(FROMS $name: [u8, u16, u32, u64, u128, $crate::u24, $crate::u40, $crate::u48, $crate::u56]);
+        $crate::enum_impl!(BITS_FIT_IN $name: [u8, u16, u32, u64, $crate::u24, $crate::u40, $crate::u48, $crate::u56]);
+
+        impl $crate::FieldStorage for $name {
+            type StoredType = u8;
+
+            fn inner_raw(self) -> Self::StoredType {
+                self as Self::StoredType
+            }
+        }
+
     };
     (
         $(#[doc = $struct_doc:expr])*
@@ -1203,7 +733,7 @@ macro_rules! enum_impl {
         #[repr(u8)]
         $(#[doc = $struct_doc])*
         $(#[derive($($struct_der),+)])?
-        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq, bit_struct::serde::Serialize, bit_struct::serde::Deserialize)]
+        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq, $crate::serde::Serialize, $crate::serde::Deserialize)]
         $enum_vis enum $name {
             $(#[doc = $fst_field_doc])*
             $fst_field,
@@ -1213,15 +743,15 @@ macro_rules! enum_impl {
             ),*
         }
 
-        unsafe impl bit_struct::BitCount for $name {
-            const COUNT: usize = bit_struct::bits(bit_struct::count_idents!(0, [$($field),*]));
+        unsafe impl $crate::BitCount for $name {
+            const COUNT: usize = $crate::bits($crate::count_idents!(0, [$($field),*]));
         }
 
         impl $name {
-            const VARIANT_COUNT: usize = bit_struct::enum_impl!(COUNT $fst_field $(,$field)*);
+            const VARIANT_COUNT: usize = $crate::enum_impl!(COUNT $fst_field $(,$field)*);
         }
 
-        unsafe impl bit_struct::ValidCheck<u8> for $name {
+        unsafe impl $crate::ValidCheck<u8> for $name {
             const ALWAYS_VALID: bool = Self::VARIANT_COUNT.count_ones() == 1;
             fn is_valid(value: u8) -> bool {
                 if (value as usize) < Self::VARIANT_COUNT {
@@ -1232,11 +762,11 @@ macro_rules! enum_impl {
             }
         }
 
-        bit_struct::enum_impl!(FROM_IMPLS $name);
+        $crate::enum_impl!(FROM_IMPLS $name);
 
         impl Default for $name {
             fn default() -> Self {
-                $name::$default
+                Self::$default
             }
         }
 
@@ -1258,7 +788,7 @@ macro_rules! enum_impl {
         #[repr(u8)]
         $(#[doc = $struct_doc])*
         $(#[derive($($struct_der),+)])?
-        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq, bit_struct::serde::Serialize, bit_struct::serde::Deserialize)]
+        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq, $crate::serde::Serialize, $crate::serde::Deserialize)]
         $enum_vis enum $name {
             $(#[doc = $fst_field_doc])*
             $fst_field,
@@ -1270,20 +800,20 @@ macro_rules! enum_impl {
 
         impl Default for $name {
             fn default() -> Self {
-                $name::$fst_field
+                Self::$fst_field
             }
         }
 
         impl $name {
-            const VARIANT_COUNT: usize = bit_struct::enum_impl!(COUNT $fst_field $(,$field)*);
+            const VARIANT_COUNT: usize = $crate::enum_impl!(COUNT $fst_field $(,$field)*);
         }
 
-        unsafe impl bit_struct::BitCount for $name {
-            const COUNT: usize = bit_struct::bits(bit_struct::count_idents!(0, [$($field),*]));
+        unsafe impl $crate::BitCount for $name {
+            const COUNT: usize = $crate::bits($crate::count_idents!(0, [$($field),*]));
         }
 
 
-        unsafe impl bit_struct::ValidCheck<u8> for $name {
+        unsafe impl $crate::ValidCheck<u8> for $name {
             const ALWAYS_VALID: bool = Self::VARIANT_COUNT.count_ones() == 1;
 
             fn is_valid(value: u8) -> bool {
@@ -1295,12 +825,38 @@ macro_rules! enum_impl {
             }
         }
 
-        bit_struct::enum_impl!(FROM_IMPLS $name);
+        $crate::enum_impl!(FROM_IMPLS $name);
     };
 }
 
-/// Create enums which have convenient TryFrom/From implementations. This makes
-/// using them with the [bit_struct] macro much easier.
+/// Create enums with trait implementations necessary for use in a `bit_struct`
+/// field.
+///
+/// Example:
+/// ```
+/// # use bit_struct::enums;
+///
+/// enums! {
+///     pub Colors { Red, Green, Blue }
+///
+///     Shapes { Triangle, Circle, Square }
+/// }
+/// ```
+///
+/// By default, this macro produces an impl of [`Default`] in which the first
+/// field listed is made the default. However, you can also specify some other
+/// variant as the default, as follows:
+/// ```
+/// # use bit_struct::enums;
+///
+/// enums! {
+///     DefaultsToA { A, B, C }
+///     DefaultsToB (B) { A, B, C }
+/// }
+///
+/// assert_eq!(DefaultsToA::default(), DefaultsToA::A);
+/// assert_eq!(DefaultsToB::default(), DefaultsToB::B);
+/// ```
 #[macro_export]
 macro_rules! enums {
     (
@@ -1318,7 +874,7 @@ macro_rules! enums {
         )+
     ) => {
         $(
-        bit_struct::enum_impl!(
+        $crate::enum_impl!(
         $(#[doc = $struct_doc])*
         $(#[derive($($struct_der),+)])?
         $enum_vis $name $(($enum_default))?{
@@ -1334,7 +890,7 @@ macro_rules! enums {
     }
 }
 
-/// Create a bit_struct
+/// Create a `bit_struct`
 #[macro_export]
 macro_rules! create {
     (
