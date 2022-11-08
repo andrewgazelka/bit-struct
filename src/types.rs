@@ -104,25 +104,25 @@ macro_rules! new_signed_types {
         }
 
         impl PartialOrd for $name {
-            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            fn partial_cmp(&self, other: &Self) -> Option<::core::cmp::Ordering> {
                 self.value().partial_cmp(&other.value())
             }
         }
 
         impl Ord for $name {
-            fn cmp(&self, other: &Self) -> Ordering {
+            fn cmp(&self, other: &Self) -> ::core::cmp::Ordering {
                 self.value().cmp(&other.value())
             }
         }
 
         impl Debug for $name {
-            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 f.write_fmt(format_args!("{}", self.value()))
             }
         }
 
         impl Display for $name {
-            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 f.write_fmt(format_args!("{}", self.value()))
             }
         }
@@ -287,7 +287,7 @@ macro_rules! num_traits {
             }
         }
 
-        impl core::str::FromStr for $num {
+        impl ::core::str::FromStr for $num {
             type Err = <Self as Num>::FromStrRadixErr;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -395,13 +395,13 @@ macro_rules! new_unsigned_types {
         always_valid!($name);
 
         impl Debug for $name {
-            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 f.write_fmt(format_args!("{}", self.0))
             }
         }
 
         impl Display for $name {
-            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 f.write_fmt(format_args!("{}", self.0))
             }
         }
@@ -644,7 +644,7 @@ macro_rules! byte_from_impls {
             /// The size of byte array equal to this value
             const ARR_SIZE: usize = <$kind>::COUNT / 8;
             /// The size of byte array equal to the underlying storage for this value
-            const SUPER_BYTES: usize = core::mem::size_of::<$super_kind>();
+            const SUPER_BYTES: usize = ::core::mem::size_of::<$super_kind>();
             /// Convert from an array of bytes, in big-endian order
             pub fn from_be_bytes(bytes: [u8; Self::ARR_SIZE]) -> Self {
                 let mut res_bytes = [0_u8; Self::SUPER_BYTES];

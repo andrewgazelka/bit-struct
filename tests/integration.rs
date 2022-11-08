@@ -17,7 +17,6 @@ enums!(
 
 bit_struct!(
     /// `Abc` struct
-    #[derive(Default)]
     struct Abc(u16){
         mode: ModeA,
         _padding: u4,
@@ -39,6 +38,12 @@ bit_struct!(
         flag_b: bool,
     }
 );
+
+impl Default for Abc {
+    fn default() -> Self {
+        Self::of_defaults()
+    }
+}
 
 #[test]
 fn test_create() {
