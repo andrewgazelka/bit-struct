@@ -11,7 +11,6 @@ bit_struct::enums! {
 bit_struct::bit_struct! {
     /// We can write documentation for the struct here. Here BitStruct1
     /// derives default values from the above enums macro
-    #[derive(Default)]
     struct BitStruct1 (u16){
         /// a 1 bit element. This is stored in u16[15]
         a: bit_struct::u1,
@@ -33,9 +32,20 @@ bit_struct::bit_struct! {
     }
 }
 
+impl Default for BitStruct1 {
+    fn default() -> Self {
+        Self::of_defaults()
+    }
+}
+
 #[test]
 fn full_test() {
     use std::convert::TryFrom;
+
+    assert_eq!(Animal::default(), Animal::Cat);
+    assert_eq!(BitStruct1::of_defaults().animal().get(), Animal::Cat);
+    assert_eq!(BitStruct1::default().animal().get(), Animal::Cat);
+
     let mut bit_struct: BitStruct1 = BitStruct1::default();
 
     assert_eq!(bit_struct.a().start(), 15);

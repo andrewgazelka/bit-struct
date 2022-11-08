@@ -2,8 +2,7 @@
 #![no_std]
 
 use core::{
-    cmp::Ordering,
-    fmt::{Debug, Display, Formatter},
+    fmt::{Debug, Display},
     marker::PhantomData,
     ops::{
         Add, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, Mul, Rem, Shl,
@@ -17,6 +16,7 @@ use num_traits::{Bounded, Num, One, Zero};
 pub use serde;
 
 mod types;
+
 pub use types::{
     i10, i11, i12, i13, i14, i15, i17, i18, i19, i2, i20, i21, i22, i23, i24, i25, i26, i27, i28,
     i29, i3, i30, i31, i33, i34, i35, i36, i37, i38, i39, i4, i40, i41, i42, i43, i44, i45, i46,
@@ -38,7 +38,7 @@ pub use types::{
 /// This makes the macros for the end-user more ergonomic, as they can use the
 /// macro multiple times in a single module.
 #[repr(transparent)]
-#[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Ord, Hash, Default)]
+#[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Ord, Hash)]
 pub struct UnsafeStorage<T>(T);
 
 impl<T> UnsafeStorage<T> {
@@ -311,15 +311,13 @@ impl<T: BitStruct<true>> BitStructExt for T {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! impl_fields {
-
-    ($on: expr, $kind: ty =>
-    [$($first_field_doc: expr),*], $head_field: ident, $head_actual: ty $(, [$($field_doc: expr),*], $field: ident, $actual: ty)*) => {
-        $(#[doc=$first_field_doc])*
+    ($on: expr, $kind: ty =>[$($first_field_meta: meta),*], $head_field: ident, $head_actual: ty $(, [$($field_meta: meta),*], $field: ident, $actual: ty)*) => {
+        $(#[$first_field_meta])*
         pub fn $head_field(&mut self) -> $crate::GetSet<'_, $kind, $head_actual, {$on - <$head_actual as $crate::BitCount>::COUNT}, {$on - 1}> {
             $crate::GetSet::new(unsafe {self.0.as_ref_mut()})
         }
 
-        $crate::impl_fields!($on - <$head_actual as $crate::BitCount>::COUNT, $kind => $([$($field_doc),*], $field, $actual),*);
+        $crate::impl_fields!($on - <$head_actual as $crate::BitCount>::COUNT, $kind => $([$($field_meta),*], $field, $actual),*);
     };
     ($on: expr, $kind: ty =>) => {};
 }
@@ -329,40 +327,10 @@ macro_rules! impl_fields {
 #[macro_export]
 macro_rules! bit_struct_impl {
     (
-        $(#[doc = $struct_doc:expr])*
-        #[derive(Default)]
+        $(#[$meta: meta])*
         $struct_vis: vis struct $name: ident ($kind: ty) {
         $(
-            $(#[doc = $field_doc:expr])*
-            $field: ident: $actual: ty
-        ),* $(,)?
-        }
-    ) => {
-
-        $crate::bit_struct_impl!(
-        $(#[doc = $struct_doc])*
-        $struct_vis struct $name ($kind) {
-        $(
-            $(#[doc = $field_doc])*
-            $field: $actual
-        ),*
-        }
-
-        );
-
-        impl Default for $name {
-            fn default() -> Self {
-                Self::of_defaults()
-            }
-        }
-
-    };
-
-    (
-        $(#[doc = $struct_doc:expr])*
-        $struct_vis: vis struct $name: ident ($kind: ty) {
-        $(
-            $(#[doc = $field_doc:expr])*
+            $(#[$field_meta: meta])*
             $field: ident: $actual: ty
         ),* $(,)?
         }
@@ -443,9 +411,7 @@ impl<T: Zero> BitStructZero for T {}
 /// }
 ///
 /// bit_struct::bit_struct! {
-///     /// We can write documentation for the struct here. Here BitStruct1
-///     /// derives default values from the above enums macro
-///     #[derive(Default)]
+///     /// We can write documentation for the struct here.
 ///     struct BitStruct1 (u16){
 ///         /// a 1 bit element. This is stored in u16[15]
 ///         a: bit_struct::u1,
@@ -469,7 +435,7 @@ impl<T: Zero> BitStructZero for T {}
 ///
 /// fn main() {
 ///     use std::convert::TryFrom;
-///     let mut bit_struct: BitStruct1 = BitStruct1::default();
+///     let mut bit_struct: BitStruct1 = BitStruct1::of_defaults();
 ///
 ///     assert_eq!(bit_struct.a().start(), 15);
 ///     assert_eq!(bit_struct.a().stop(), 15);
@@ -507,21 +473,21 @@ impl<T: Zero> BitStructZero for T {}
 macro_rules! bit_struct {
     (
         $(
-        $(#[doc = $struct_doc:expr])*
-        $(#[derive($($struct_der: ident),+)])?
+        $(#[$meta:meta])*
         $struct_vis: vis struct $name: ident ($kind: ty) {
         $(
-            $(#[doc = $field_doc:expr])*
+            $(#[$field_meta:meta])*
             $field: ident: $actual: ty
         ),* $(,)?
         }
         )*
     ) => {
         $(
-        $(#[doc = $struct_doc])*
+        $(#[$meta])*
         #[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Ord, Hash)]
         pub struct $name($crate::UnsafeStorage<$kind>);
 
+        #[allow(clippy::used_underscore_binding)]
         impl $crate::serde::Serialize for $name {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: $crate::serde::Serializer {
 
@@ -539,6 +505,7 @@ macro_rules! bit_struct {
             }
         }
 
+        #[allow(clippy::used_underscore_binding)]
         impl $crate::serde::Deserialize<'static> for $name {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: $crate::serde::Deserializer<'static> {
 
@@ -555,6 +522,7 @@ macro_rules! bit_struct {
             }
         }
 
+        #[allow(clippy::used_underscore_binding)]
         impl TryFrom<$kind> for $name {
             type Error = ();
             fn try_from(elem: $kind) -> Result<$name, ()> {
@@ -568,6 +536,7 @@ macro_rules! bit_struct {
             }
         }
 
+        #[allow(clippy::used_underscore_binding)]
         impl $crate::BitStruct<{$(<$actual as $crate::ValidCheck<$kind>>::ALWAYS_VALID &&)* true}> for $name {
             type Kind = $kind;
 
@@ -576,6 +545,7 @@ macro_rules! bit_struct {
             }
         }
 
+        #[allow(clippy::used_underscore_binding)]
         impl $name {
 
             unsafe fn from_unchecked(inner: $kind) -> Self {
@@ -595,18 +565,17 @@ macro_rules! bit_struct {
                 self.0.inner()
             }
 
-            $crate::impl_fields!(<$kind as $crate::BitCount>::COUNT, $kind => $([$($field_doc),*], $field, $actual),*);
+            $crate::impl_fields!(<$kind as $crate::BitCount>::COUNT, $kind => $([$($field_meta),*], $field, $actual),*);
         }
 
         )*
 
         $(
         $crate::bit_struct_impl!(
-        $(#[doc = $struct_doc])*
-        $(#[derive($($struct_der),+)])?
+        $(#[$meta])*
         $struct_vis struct $name ($kind) {
         $(
-            $(#[doc = $field_doc])*
+            $(#[$field_meta])*
             $field: $actual
         ),*
         }
@@ -718,27 +687,24 @@ macro_rules! enum_impl {
 
     };
     (
-        $(#[doc = $struct_doc:expr])*
-        $(#[derive($($struct_der:ident),+)])?
-        $enum_vis: vis $name: ident($default: ident){
-            $(#[doc = $fst_field_doc:expr])*
+        $(#[$meta:meta])*
+        $enum_vis: vis $name: ident($default: ident) {
+            $(#[$fst_field_meta:meta])*
             $fst_field: ident
             $(,
-                $(#[doc = $field_doc:expr])*
+                $(#[$field_meta:meta])*
                 $field: ident
             )* $(,)?
         }
     ) => {
-
         #[repr(u8)]
-        $(#[doc = $struct_doc])*
-        $(#[derive($($struct_der),+)])?
+        $(#[$meta])*
         #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq, $crate::serde::Serialize, $crate::serde::Deserialize)]
         $enum_vis enum $name {
-            $(#[doc = $fst_field_doc])*
+            $(#[$fst_field_meta])*
             $fst_field,
             $(
-                $(#[doc = $field_doc])*
+                $(#[$field_meta])*
                 $field
             ),*
         }
@@ -774,26 +740,24 @@ macro_rules! enum_impl {
 
 
     (
-        $(#[doc = $struct_doc:expr])*
-        $(#[derive($($struct_der:ident),+)])?
+        $(#[$meta:meta])*
         $enum_vis: vis $name: ident {
-            $(#[doc = $fst_field_doc:expr])*
+            $(#[$fst_field_meta:meta])*
             $fst_field: ident
             $(,
-                $(#[doc = $field_doc:expr])*
+                $(#[$field_meta:meta])*
                 $field: ident
             )* $(,)?
         }
     ) => {
         #[repr(u8)]
-        $(#[doc = $struct_doc])*
-        $(#[derive($($struct_der),+)])?
+        $(#[$meta])*
         #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq, $crate::serde::Serialize, $crate::serde::Deserialize)]
         $enum_vis enum $name {
-            $(#[doc = $fst_field_doc])*
+            $(#[$fst_field_meta])*
             $fst_field,
             $(
-                $(#[doc = $field_doc])*
+                $(#[$field_meta])*
                 $field
             ),*
         }
@@ -861,13 +825,13 @@ macro_rules! enum_impl {
 macro_rules! enums {
     (
         $(
-        $(#[doc = $struct_doc:expr])*
-        $(#[derive($($struct_der:ident),+)])?
+        $(#[$meta:meta])*
         $enum_vis: vis $name: ident $(($enum_default: ident))? {
-            $(#[doc = $fst_field_doc:expr])*
+
+            $(#[$fst_field_meta:meta])*
             $fst_field: ident
             $(,
-                $(#[doc = $field_doc:expr])*
+                $(#[$field_meta:meta])*
                 $field: ident
             )* $(,)?
         }
@@ -875,13 +839,12 @@ macro_rules! enums {
     ) => {
         $(
         $crate::enum_impl!(
-        $(#[doc = $struct_doc])*
-        $(#[derive($($struct_der),+)])?
-        $enum_vis $name $(($enum_default))?{
-            $(#[doc = $fst_field_doc])*
+        $(#[$meta])*
+        $enum_vis $name $(($enum_default))? {
+            $(#[$fst_field_meta])*
             $fst_field
             $(,
-                $(#[doc = $field_doc])*
+                $(#[$field_meta])*
                 $field
             )*
         }
