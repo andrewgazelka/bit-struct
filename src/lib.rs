@@ -146,11 +146,13 @@ pub struct GetSet<'a, P, T, const START: usize, const STOP: usize> {
 
 impl<'a, P, T, const START: usize, const STOP: usize> GetSet<'a, P, T, START, STOP> {
     /// The bit offset at which this `GetSet` instance starts
+    #[must_use]
     pub const fn start(&self) -> usize {
         START
     }
 
     /// The bit offset at which this `GetSet` instance ends
+    #[must_use]
     pub const fn stop(&self) -> usize {
         STOP
     }
@@ -206,6 +208,7 @@ impl<
     > GetSet<'a, P, T, START, STOP>
 {
     /// Get the property this `GetSet` points at
+    #[must_use]
     pub fn get(&self) -> T {
         let section = self.get_raw();
         // Safety:
@@ -216,6 +219,7 @@ impl<
 
     /// Returns true if the memory this `GetSet` points at is a valid
     /// representation of `T`
+    #[must_use]
     pub fn is_valid(&self) -> bool {
         let section = self.get_raw();
         T::is_valid(section)
@@ -223,6 +227,7 @@ impl<
 
     /// Get the raw bits being pointed at, without type conversion nor any form
     /// of validation
+    #[must_use]
     pub fn get_raw(&self) -> P {
         let parent = *self.parent;
         let mask = self.mask();
@@ -338,9 +343,12 @@ macro_rules! bit_struct_impl {
 
         impl $name {
 
-            /// Creates an empty struct. This may or may not be valid
+            /// Creates an empty struct.
+            ///
+            /// # Safety
+            /// This is safe if the bit-struct can be represented by a zero.
             pub unsafe fn empty() -> Self {
-                unsafe { Self::from_unchecked(<$kind as $crate::BitStructZero>::bs_zero()) }
+                Self::from_unchecked(<$kind as $crate::BitStructZero>::bs_zero())
             }
 
             #[doc = concat!("Returns a valid representation for [`", stringify!($name), "`] where all values are")]
@@ -373,6 +381,7 @@ macro_rules! bit_struct_impl {
 /// A bit struct which has a zero value we can get
 pub trait BitStructZero: Zero {
     /// Get a zero value for this bit struct
+    #[must_use]
     fn bs_zero() -> Self {
         Self::zero()
     }
@@ -540,6 +549,8 @@ macro_rules! bit_struct {
         impl $crate::BitStruct<{$(<$actual as $crate::ValidCheck<$kind>>::ALWAYS_VALID &&)* true}> for $name {
             type Kind = $kind;
 
+            /// # Safety
+            /// - Creates the bit-struct without checking whether `inner` is a valid representation.
             unsafe fn from_unchecked(inner: $kind) -> Self {
                Self(unsafe {$crate::UnsafeStorage::new_unsafe(inner)})
             }
@@ -548,12 +559,16 @@ macro_rules! bit_struct {
         #[allow(clippy::used_underscore_binding)]
         impl $name {
 
+            /// # Safety
+            /// - Creates the bit-struct without checking whether `inner` is a valid representation.
             unsafe fn from_unchecked(inner: $kind) -> Self {
                Self(unsafe {$crate::UnsafeStorage::new_unsafe(inner)})
             }
 
             #[allow(clippy::too_many_arguments)]
             pub fn new($($field: $actual),*) -> Self {
+                // SAFETY:
+                // - This is implemented automatically by the bit-struct crate.
                 let mut res = unsafe { Self::from_unchecked(<$kind as $crate::BitStructZero>::bs_zero()) };
                 $(
                     res.$field().set($field);
@@ -607,6 +622,7 @@ macro_rules! count_idents {
 /// assert_eq!(bits(5), 3);
 /// assert_eq!(bits(32), 6);
 /// ```
+#[must_use]
 pub const fn bits(num: usize) -> usize {
     /// Helper function for [`bits`]
     const fn helper(count: usize, on: usize) -> usize {
@@ -637,6 +653,7 @@ macro_rules! enum_impl {
     };
     (VALID_CORE $name: ident: [$($kind: ty),*]) => {
         $(
+        #[allow(clippy::undocumented_unsafe_blocks, clippy::use_self)]
         unsafe impl $crate::ValidCheck<$kind> for $name {
             const ALWAYS_VALID: bool = <Self as $crate::ValidCheck<u8>>::ALWAYS_VALID;
             fn is_valid(value: $kind) -> bool {
@@ -653,6 +670,7 @@ macro_rules! enum_impl {
     };
     (VALID_BIT_STRUCT $name: ident: [$($kind: ty),*]) => {
         $(
+        #[allow(clippy::undocumented_unsafe_blocks, clippy::use_self)]
         unsafe impl $crate::ValidCheck<$kind> for $name {
             const ALWAYS_VALID: bool = <Self as $crate::ValidCheck<u8>>::ALWAYS_VALID;
             fn is_valid(value: $kind) -> bool {
@@ -709,14 +727,19 @@ macro_rules! enum_impl {
             ),*
         }
 
+        /// # Safety
+        /// - This is implemented automatically by the bit-struct crate.
+        #[allow(clippy::use_self)]
         unsafe impl $crate::BitCount for $name {
             const COUNT: usize = $crate::bits($crate::count_idents!(0, [$($field),*]));
         }
 
+        #[allow(clippy::use_self)]
         impl $name {
             const VARIANT_COUNT: usize = $crate::enum_impl!(COUNT $fst_field $(,$field)*);
         }
 
+        #[allow(clippy::undocumented_unsafe_blocks, clippy::use_self)]
         unsafe impl $crate::ValidCheck<u8> for $name {
             const ALWAYS_VALID: bool = Self::VARIANT_COUNT.count_ones() == 1;
             fn is_valid(value: u8) -> bool {
@@ -730,6 +753,7 @@ macro_rules! enum_impl {
 
         $crate::enum_impl!(FROM_IMPLS $name);
 
+        #[allow(clippy::use_self)]
         impl Default for $name {
             fn default() -> Self {
                 Self::$default
@@ -762,6 +786,7 @@ macro_rules! enum_impl {
             ),*
         }
 
+        #[allow(clippy::use_self)]
         impl Default for $name {
             fn default() -> Self {
                 Self::$fst_field
@@ -772,11 +797,12 @@ macro_rules! enum_impl {
             const VARIANT_COUNT: usize = $crate::enum_impl!(COUNT $fst_field $(,$field)*);
         }
 
+        #[allow(clippy::undocumented_unsafe_blocks)]
         unsafe impl $crate::BitCount for $name {
             const COUNT: usize = $crate::bits($crate::count_idents!(0, [$($field),*]));
         }
 
-
+        #[allow(clippy::undocumented_unsafe_blocks)]
         unsafe impl $crate::ValidCheck<u8> for $name {
             const ALWAYS_VALID: bool = Self::VARIANT_COUNT.count_ones() == 1;
 

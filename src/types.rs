@@ -1,7 +1,12 @@
 //! New integer types used in this crate, and trait implementations for those
 //! types
 
-use super::*;
+use super::{
+    serde, Add, BitAnd, BitAndAssign, BitCount, BitOr, BitOrAssign, BitXor, BitXorAssign,
+    BitsFitIn, Bounded, Debug, Display, Div, FieldStorage, Mul, Num, One, Rem, Shl, ShlAssign, Shr,
+    ShrAssign, Sub, ValidCheck, Zero,
+};
+use crate::enums;
 use serde::{Deserializer, Serializer};
 
 /// Assert that the given type is valid for any representation thereof
@@ -54,6 +59,7 @@ impl_field_storage!(
     (u64, Self),
     (u128, Self),
 );
+/// helper macro to implement signed  types
 macro_rules! impl_signed_field_storage {
     ($(($type:ty, $base:ty)),+ $(,)?) => {
         $(
@@ -156,7 +162,7 @@ macro_rules! new_signed_types {
             /// Create a new $name from value
             /// # Safety
             /// - value must fit within the number of bits defined in the type
-            pub const unsafe fn new_unchecked(value: $signed) -> Self {
+            #[must_use] pub const unsafe fn new_unchecked(value: $signed) -> Self {
                 let unsigned_value = value as $inner;
                 if value >= 0 {
                     Self(unsigned_value)
@@ -171,7 +177,7 @@ macro_rules! new_signed_types {
             /// Create a new $name from value
             /// # Safety
             /// - value must fit within the number of bits defined in the type
-            pub fn new(value: $signed) -> Option<Self> {
+            #[must_use] pub fn new(value: $signed) -> Option<Self> {
                 if (Self::MIN..=Self::MAX).contains(&value) {
                     // SAFETY:
                     // We've just checked that this is safe to call
@@ -189,7 +195,7 @@ macro_rules! new_signed_types {
             pub const MIN: $signed = -(Self::MAX_UNSIGNED as $signed) - 1;
 
             /// Get the value stored in here, as a signed integer
-            pub const fn value(self) -> $signed {
+            #[must_use] pub const fn value(self) -> $signed {
                 match self.0 >> ($count - 1) {
                     0 => self.0 as $signed,
                     _ => {
@@ -467,14 +473,14 @@ macro_rules! new_unsigned_types {
             ///
             /// # Safety
             /// The value must be valid value of the given type.
-            pub const unsafe fn new_unchecked(value: $inner) -> Self {
+            #[must_use] pub const unsafe fn new_unchecked(value: $inner) -> Self {
                 Self(value)
             }
 
             #[doc = concat!("Create a new ", stringify!($name), " from an inner value")]
             ///
             /// This method checks that the inner value is valid, and return `None` if it isn't.
-            pub fn new(value: $inner) -> Option<Self> {
+            #[must_use] pub fn new(value: $inner) -> Option<Self> {
                 if (Self::MIN..=Self::MAX).contains(&value) {
                     // SAFETY:
                     // We've checked that this is safe to do in the above `if`
@@ -485,7 +491,7 @@ macro_rules! new_unsigned_types {
             }
 
             /// Get the stored value
-            pub const fn value(self) -> $inner {
+            #[must_use] pub const fn value(self) -> $inner {
                 self.0
             }
         }
@@ -646,7 +652,7 @@ macro_rules! byte_from_impls {
             /// The size of byte array equal to the underlying storage for this value
             const SUPER_BYTES: usize = ::core::mem::size_of::<$super_kind>();
             /// Convert from an array of bytes, in big-endian order
-            pub fn from_be_bytes(bytes: [u8; Self::ARR_SIZE]) -> Self {
+            #[must_use] pub fn from_be_bytes(bytes: [u8; Self::ARR_SIZE]) -> Self {
                 let mut res_bytes = [0_u8; Self::SUPER_BYTES];
                 for (set, &get) in res_bytes.iter_mut().rev().zip(bytes.iter().rev()) {
                     *set = get;
@@ -655,7 +661,7 @@ macro_rules! byte_from_impls {
             }
 
             /// Convert `self` into an array of bytes, in big-endian order
-            pub fn to_be_bytes(self) -> [u8; Self::ARR_SIZE] {
+            #[must_use] pub fn to_be_bytes(self) -> [u8; Self::ARR_SIZE] {
                 let mut res = [0; Self::ARR_SIZE];
                 let inner_bytes = self.0.to_be_bytes();
                 for (&get, set) in inner_bytes.iter().rev().zip(res.iter_mut().rev()) {
@@ -665,7 +671,7 @@ macro_rules! byte_from_impls {
             }
 
             /// Convert from an array of bytes, in little-endian order
-            pub fn from_le_bytes(bytes: [u8; Self::ARR_SIZE]) -> Self {
+            #[must_use] pub fn from_le_bytes(bytes: [u8; Self::ARR_SIZE]) -> Self {
                 let mut res_bytes = [0_u8; Self::SUPER_BYTES];
                 for (set, &get) in res_bytes.iter_mut().zip(bytes.iter()) {
                     *set = get;
@@ -674,7 +680,7 @@ macro_rules! byte_from_impls {
             }
 
             /// Convert `self` into an array of bytes, in little-endian order
-            pub fn to_le_bytes(self) -> [u8; Self::ARR_SIZE] {
+            #[must_use] pub fn to_le_bytes(self) -> [u8; Self::ARR_SIZE] {
                 let mut res = [0; Self::ARR_SIZE];
                 let inner_bytes = self.0.to_le_bytes();
                 for (&get, set) in inner_bytes.iter().zip(res.iter_mut()) {
@@ -724,6 +730,7 @@ impl u1 {
 /// Implement `BitsFitIn` for the given pair of types, using the given method
 macro_rules! bits_fit_in_impl {
     ($basety:ty => $target:ty : from) => {
+        #[allow(clippy::use_self)]
         impl BitsFitIn<$target> for $basety {
             fn fit(self) -> $target {
                 self.inner_raw().into()
@@ -731,6 +738,7 @@ macro_rules! bits_fit_in_impl {
         }
     };
     ($basety:ty => $target:ty : new_unchecked) => {
+        #[allow(clippy::use_self)]
         impl BitsFitIn<$target> for $basety {
             fn fit(self) -> $target {
                 // Safety:
