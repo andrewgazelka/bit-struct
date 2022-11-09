@@ -146,12 +146,14 @@ pub struct GetSet<'a, P, T, const START: usize, const STOP: usize> {
 
 impl<'a, P, T, const START: usize, const STOP: usize> GetSet<'a, P, T, START, STOP> {
     /// The bit offset at which this `GetSet` instance starts
-    #[must_use] pub const fn start(&self) -> usize {
+    #[must_use]
+    pub const fn start(&self) -> usize {
         START
     }
 
     /// The bit offset at which this `GetSet` instance ends
-    #[must_use] pub const fn stop(&self) -> usize {
+    #[must_use]
+    pub const fn stop(&self) -> usize {
         STOP
     }
 }
@@ -206,7 +208,8 @@ impl<
     > GetSet<'a, P, T, START, STOP>
 {
     /// Get the property this `GetSet` points at
-    #[must_use] pub fn get(&self) -> T {
+    #[must_use]
+    pub fn get(&self) -> T {
         let section = self.get_raw();
         // Safety:
         // This is guaranteed to be safe because the underlying storage must be bigger
@@ -216,14 +219,16 @@ impl<
 
     /// Returns true if the memory this `GetSet` points at is a valid
     /// representation of `T`
-    #[must_use] pub fn is_valid(&self) -> bool {
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
         let section = self.get_raw();
         T::is_valid(section)
     }
 
     /// Get the raw bits being pointed at, without type conversion nor any form
     /// of validation
-    #[must_use] pub fn get_raw(&self) -> P {
+    #[must_use]
+    pub fn get_raw(&self) -> P {
         let parent = *self.parent;
         let mask = self.mask();
         (parent >> START) & mask
@@ -338,9 +343,12 @@ macro_rules! bit_struct_impl {
 
         impl $name {
 
-            /// Creates an empty struct. This may or may not be valid
+            /// Creates an empty struct.
+            ///
+            /// # Safety
+            /// This is safe if the bit-struct can be represented by a zero.
             pub unsafe fn empty() -> Self {
-                unsafe { Self::from_unchecked(<$kind as $crate::BitStructZero>::bs_zero()) }
+                Self::from_unchecked(<$kind as $crate::BitStructZero>::bs_zero())
             }
 
             #[doc = concat!("Returns a valid representation for [`", stringify!($name), "`] where all values are")]
@@ -373,7 +381,8 @@ macro_rules! bit_struct_impl {
 /// A bit struct which has a zero value we can get
 pub trait BitStructZero: Zero {
     /// Get a zero value for this bit struct
-    #[must_use] fn bs_zero() -> Self {
+    #[must_use]
+    fn bs_zero() -> Self {
         Self::zero()
     }
 }
@@ -541,7 +550,7 @@ macro_rules! bit_struct {
             type Kind = $kind;
 
             /// # Safety
-            /// - This is implemented automatically by the bit-struct crate.
+            /// - Creates the bit-struct without checking whether `inner` is a valid representation.
             unsafe fn from_unchecked(inner: $kind) -> Self {
                Self(unsafe {$crate::UnsafeStorage::new_unsafe(inner)})
             }
@@ -551,7 +560,7 @@ macro_rules! bit_struct {
         impl $name {
 
             /// # Safety
-            /// - This is implemented automatically by the bit-struct crate.
+            /// - Creates the bit-struct without checking whether `inner` is a valid representation.
             unsafe fn from_unchecked(inner: $kind) -> Self {
                Self(unsafe {$crate::UnsafeStorage::new_unsafe(inner)})
             }
@@ -613,7 +622,8 @@ macro_rules! count_idents {
 /// assert_eq!(bits(5), 3);
 /// assert_eq!(bits(32), 6);
 /// ```
-#[must_use] pub const fn bits(num: usize) -> usize {
+#[must_use]
+pub const fn bits(num: usize) -> usize {
     /// Helper function for [`bits`]
     const fn helper(count: usize, on: usize) -> usize {
         // 0b11 = 3  log2_ceil(0b11) = 2 .. 2^2
