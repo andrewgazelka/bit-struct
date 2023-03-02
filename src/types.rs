@@ -2,6 +2,7 @@
 //! types
 
 use super::*;
+#[cfg(feature = "serde")]
 use serde::{Deserializer, Serializer};
 
 /// Assert that the given type is valid for any representation thereof
@@ -84,6 +85,7 @@ macro_rules! new_signed_types {
 
         always_valid!($name);
 
+        #[cfg(feature = "serde")]
         impl serde::Serialize for $name {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
@@ -93,6 +95,7 @@ macro_rules! new_signed_types {
             }
         }
 
+        #[cfg(feature = "serde")]
         impl <'de> serde::Deserialize<'de> for $name {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
@@ -406,6 +409,7 @@ macro_rules! new_unsigned_types {
             }
         }
 
+        #[cfg(feature = "serde")]
         impl serde::Serialize for $name {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
@@ -415,6 +419,7 @@ macro_rules! new_unsigned_types {
             }
         }
 
+        #[cfg(feature = "serde")]
         impl <'de> serde::Deserialize<'de> for $name {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where

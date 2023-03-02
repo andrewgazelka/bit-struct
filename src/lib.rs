@@ -13,6 +13,7 @@ use core::{
 use num_traits::{Bounded, Num, One, Zero};
 /// Import serde here so we can reference it inside macros
 #[doc(hidden)]
+#[cfg(feature = "serde")]
 pub use serde;
 
 mod types;
@@ -370,6 +371,127 @@ macro_rules! bit_struct_impl {
     };
 }
 
+/// `serde` feature is not provided, so don't implement it
+#[doc(hidden)]
+#[macro_export]
+#[cfg(not(feature = "serde"))]
+macro_rules! bit_struct_serde_impl {
+    (
+        $(#[$meta:meta])*
+        $struct_vis:vis struct
+        $name:ident($kind:ty) { $($(#[$field_meta:meta])* $field:ident : $actual:ty),* $(,)? }
+    ) => {};
+}
+/// `serde` feature is provided, so implement it
+#[doc(hidden)]
+#[macro_export]
+#[cfg(feature = "serde")]
+macro_rules! bit_struct_serde_impl {
+    (
+        $(#[$meta:meta])*
+        $struct_vis: vis struct $name: ident ($kind: ty) {
+        $(
+            $(#[$field_meta:meta])*
+            $field: ident: $actual: ty
+        ),* $(,)?
+        }
+    ) => {
+        #[allow(clippy::used_underscore_binding)]
+        impl $crate::serde::Serialize for $name {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: $crate::serde::Serializer {
+                use $crate::serde::ser::SerializeStruct;
+
+                let mut v = *self;
+
+                let mut serializer = serializer.serialize_struct(
+                    stringify!($name),
+                    $crate::count_idents!( 0, [$( $field ),*] ),
+                )?;
+                $(
+                    serializer.serialize_field(
+                        stringify!($field),
+                        &v.$field().get()
+                    )?;
+                )*
+                serializer.end()
+            }
+        }
+
+        #[allow(clippy::used_underscore_binding)]
+        impl<'de> $crate::serde::Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: $crate::serde::Deserializer<'de> {
+
+                use $crate::serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
+                use ::core::fmt;
+
+                const FIELDS: &'static [&'static str] = &[ $( stringify!( $field ) ),* ];
+
+                #[allow(non_camel_case_types)]
+                enum Fields { $( $field ),* }
+                impl<'de> Deserialize<'de> for Fields {
+                    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                        struct FieldVisitor;
+                        impl<'de> Visitor<'de> for FieldVisitor {
+                            type Value = Fields;
+
+                            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                                f.write_str(stringify!( $( $field ),* ))
+                            }
+
+                            fn visit_str<E: de::Error>(self, value: &str) -> Result<Fields, E> {
+                                match value {
+                                    $( stringify!( $field ) => Ok(Fields::$field), )*
+                                    _ => Err(de::Error::unknown_field(value, FIELDS)),
+                                }
+                            }
+                        }
+
+                        deserializer.deserialize_identifier(FieldVisitor)
+                    }
+                }
+
+                struct BitStructVisitor;
+                impl<'de> Visitor<'de> for BitStructVisitor {
+                    type Value = $name;
+
+                    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        f.write_str(concat!("struct ", stringify!($name)))
+                    }
+
+                    fn visit_map<V: MapAccess<'de>>(self, mut map: V) -> Result<$name, V::Error> {
+                        $( let mut $field: Option<$actual> = None; )*
+                        while let Some(key) = map.next_key::<Fields>()? {
+                            match key {
+                                $( Fields::$field => {
+                                    if $field.is_some() {
+                                        return Err(de::Error::duplicate_field(stringify!($field)));
+                                    }
+                                    $field = Some(map.next_value()?);
+                                },)*
+                            }
+                        }
+                        $(
+                            let $field = $field.ok_or_else(|| de::Error::missing_field(stringify!($field)))?;
+                        )*
+                        Ok($name::new( $( $field ),* ))
+                    }
+
+                    fn visit_seq<V: SeqAccess<'de>>(self, mut seq: V) -> Result<$name, V::Error> {
+                        let mut count = 0;
+                        $(
+                            let $field = seq.next_element()?
+                                .ok_or_else(|| de::Error::invalid_length(count, &self))?;
+                            count += 1;
+                        )*
+                        Ok($name::new( $( $field ),* ))
+                    }
+                }
+                deserializer.deserialize_struct(stringify!($name), FIELDS, BitStructVisitor)
+            }
+        }
+    }
+}
+
 /// A bit struct which has a zero value we can get
 pub trait BitStructZero: Zero {
     /// Get a zero value for this bit struct
@@ -487,38 +609,13 @@ macro_rules! bit_struct {
         #[derive(Copy, Clone, PartialOrd, PartialEq, Eq, Ord, Hash)]
         pub struct $name($crate::UnsafeStorage<$kind>);
 
-        #[allow(clippy::used_underscore_binding)]
-        impl $crate::serde::Serialize for $name {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: $crate::serde::Serializer {
-
-                let mut v = *self;
-                #[derive($crate::serde::Serialize)]
-                struct Raw {
-                    $($field: $actual),*
-                }
-
-                let raw = Raw {
-                    $($field: v.$field().get(),)*
-                };
-
-                raw.serialize(serializer)
-            }
-        }
-
-        #[allow(clippy::used_underscore_binding)]
-        impl $crate::serde::Deserialize<'static> for $name {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: $crate::serde::Deserializer<'static> {
-
-                #[derive($crate::serde::Deserialize)]
-                struct Raw {
-                    $($field: $actual),*
-                }
-
-                let raw = Raw::deserialize(deserializer)?;
-
-                Ok($name::new(
-                    $(raw.$field),*
-                ))
+        $crate::bit_struct_serde_impl! {
+            $(#[$meta])*
+            $struct_vis struct $name ($kind) {
+            $(
+                $(#[$field_meta])*
+                $field: $actual
+            ),*
             }
         }
 
@@ -593,7 +690,7 @@ macro_rules! count_idents {
     };
     ($on: expr, []) => {
         $on
-    }
+    };
 }
 
 /// Returns the index of the leading 1 in `num`
@@ -620,6 +717,113 @@ pub const fn bits(num: usize) -> usize {
     }
 
     helper(0, num)
+}
+
+/// `serde` feature is not provided, so don't implement it
+#[doc(hidden)]
+#[cfg(not(feature = "serde"))]
+#[macro_export]
+macro_rules! enum_serde_impl {
+    ($enum_vis:vis $name:ident { $fst_field:ident $(, $field:ident)* }) => {};
+}
+
+/// `serde` feature is provided, so implement it
+#[doc(hidden)]
+#[cfg(feature = "serde")]
+#[macro_export]
+macro_rules! enum_serde_impl {
+    ($name:ident { $($field:ident),* }) => {
+        impl $crate::serde::Serialize for $name {
+            fn serialize<S: $crate::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                match self {
+                    $(
+                        Self::$field => {
+                            serializer.serialize_unit_variant(
+                                stringify!($name),
+                                *self as u32,
+                                stringify!($field),
+                            )
+                        },
+                    )*
+                }
+            }
+        }
+        impl<'de> $crate::serde::Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: $crate::serde::Deserializer<'de> {
+                use ::core::{fmt, result::Result::{self, Ok, Err}, convert::TryFrom};
+                use $crate::serde::de::{Deserialize, Deserializer, EnumAccess, VariantAccess, Visitor};
+
+                #[repr(u64)]
+                enum Variants { $( $field ),* }
+                impl TryFrom<u64> for Variants {
+                    type Error = ();
+
+                    fn try_from(v: u64) -> Result<Self, Self::Error> {
+                        if v < $crate::count_idents!(0, [$( $field ),*]) {
+                            // SAFETY:
+                            // This is safe because we're converting a `u64` to a `repr(u64)`
+                            // enum, and we've checked that the value is one of the variants.
+                            unsafe { core::mem::transmute(v) }
+                        } else {
+                            Err(())
+                        }
+                    }
+                }
+                impl<'de> Deserialize<'de> for Variants {
+                    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                        struct VariantsVisitor;
+                        impl<'de> Visitor<'de> for VariantsVisitor {
+                            type Value = Variants;
+                            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                                formatter.write_str("variant identifier")
+                            }
+
+                            fn visit_u64<E: $crate::serde::de::Error>(self, value: u64) -> Result<Self::Value, E> {
+                                Variants::try_from(value)
+                                    .map_err(|()| $crate::serde::de::Error::invalid_value(
+                                        $crate::serde::de::Unexpected::Unsigned(value),
+                                        &"variant index"
+                                    ))
+                            }
+
+                            fn visit_str<E: $crate::serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                                match value {
+                                    $( stringify!($field) => Ok(Variants::$field), )*
+                                    _ => Err($crate::serde::de::Error::unknown_variant(value, VARIANTS)),
+                                }
+                            }
+                        }
+                        deserializer.deserialize_identifier(VariantsVisitor)
+                    }
+                }
+
+                struct EnumVisitor;
+                impl<'de> Visitor<'de> for EnumVisitor {
+                    type Value = $name;
+                    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                        formatter.write_str(concat!("enum ", stringify!($name)))
+                    }
+
+                    fn visit_enum<A: EnumAccess<'de>>(self, data: A) -> Result<Self::Value, A::Error> {
+                        match data.variant()? {
+                            $(
+                            (Variants::$field, variant) => {
+                                let () = variant.unit_variant()?;
+                                Ok($name::$field)
+                            }
+                            ),*
+                        }
+                    }
+                }
+                const VARIANTS: &'static [&'static str] = &[ $( stringify!( $field ) ),* ];
+                deserializer.deserialize_enum(
+                    stringify!($name),
+                    VARIANTS,
+                    EnumVisitor,
+                )
+            }
+        }
+    };
 }
 
 /// Helper macro
@@ -699,7 +903,7 @@ macro_rules! enum_impl {
     ) => {
         #[repr(u8)]
         $(#[$meta])*
-        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq, $crate::serde::Serialize, $crate::serde::Deserialize)]
+        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
         $enum_vis enum $name {
             $(#[$fst_field_meta])*
             $fst_field,
@@ -708,6 +912,8 @@ macro_rules! enum_impl {
                 $field
             ),*
         }
+
+        $crate::enum_serde_impl! { $name { $fst_field $(, $field)* } }
 
         unsafe impl $crate::BitCount for $name {
             const COUNT: usize = $crate::bits($crate::count_idents!(0, [$($field),*]));
@@ -752,7 +958,7 @@ macro_rules! enum_impl {
     ) => {
         #[repr(u8)]
         $(#[$meta])*
-        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq, $crate::serde::Serialize, $crate::serde::Deserialize)]
+        #[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
         $enum_vis enum $name {
             $(#[$fst_field_meta])*
             $fst_field,
@@ -761,6 +967,8 @@ macro_rules! enum_impl {
                 $field
             ),*
         }
+
+        $crate::enum_serde_impl! { $name { $fst_field $(, $field)* } }
 
         impl Default for $name {
             fn default() -> Self {
