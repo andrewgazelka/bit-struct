@@ -6,7 +6,6 @@ use super::{
     BitsFitIn, Bounded, Debug, Display, Div, FieldStorage, Mul, Num, One, Rem, Shl, ShlAssign, Shr,
     ShrAssign, Sub, ValidCheck, Zero,
 };
-use crate::enums;
 use serde::{Deserializer, Serializer};
 
 /// Assert that the given type is valid for any representation thereof
